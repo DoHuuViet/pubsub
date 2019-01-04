@@ -86,8 +86,8 @@ func (c *Channel) Unsubscribe(id string) {
 		atomic.AddUint32(c.Subscriptions[id].Closed, uint32(1))
 		log.Printf("sub-remove: %s=%v", id, c.Subscriptions[id].Data)
 
-		// ch := c.Subscriptions[id].Data
+		ch := c.Subscriptions[id].Data
 		delete(c.Subscriptions, id)
-		// close(ch)
+		close(ch)
 	}
 }

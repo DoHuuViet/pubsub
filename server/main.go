@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/twinj/uuid"
@@ -61,7 +62,12 @@ func proxyHandler(requests chan *http.Request, channel *Channel) func(w http.Res
 				}
 				res = recvRes
 				break
+			case <-time.After(time.Second * 4):
+				log.Println("Timeout after 4s")
+				goto subdone
 			}
+
+		subdone:
 
 			wg.Done()
 		}(sub)
@@ -76,14 +82,20 @@ func proxyHandler(requests chan *http.Request, channel *Channel) func(w http.Res
 
 		wg.Wait()
 
+		if res == nil {
+			w.WriteHeader(http.StatusGatewayTimeout)
+			w.Write([]byte("Timeout\n"))
+			return
+		}
+
 		w.WriteHeader(res.StatusCode)
 		w.Write([]byte("Done\n"))
 		log.Printf("router-sent [%s]\n", inletsID)
 
-		// defer func() {
-		// 	channel.Unsubscribe(inletsID)
-		// 	log.Printf("router-remove [%s]\n", inletsID)
-		// }()
+		defer func() {
+			channel.Unsubscribe(inletsID)
+			log.Printf("router-remove [%s]\n", inletsID)
+		}()
 
 	}
 }
@@ -147,20 +159,21 @@ func serveWs(requests chan *http.Request, channel *Channel) func(w http.Response
 
 					fmt.Printf("ws-recv [%s]\n", res.Header.Get("inlets-id"))
 					subs := 0
-
+					sent := 0
 					// Dispatch via subscriptions
 					subsList := channel.SubscriptionList()
 					totals := len(subsList)
 					for i, subKey := range subsList {
+						if subKey == res.Header.Get("inlets-id") {
+							fmt.Printf("ws-ch-send %d/%d\n", (i + 1), totals)
 
-						fmt.Printf("ws-ch-send %d/%d\n", (i + 1), totals)
-
-						channel.Send(subKey, res)
-
+							channel.Send(subKey, res)
+							sent = sent + 1
+						}
 						subs++
 					}
 
-					log.Printf("%d subs processed\n", subs)
+					log.Printf("%d subs processed, subs sent: %d\n", subs, sent)
 
 				}
 			}
