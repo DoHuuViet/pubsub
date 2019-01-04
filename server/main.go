@@ -82,6 +82,11 @@ func proxyHandler(requests chan *http.Request, channel *Channel) func(w http.Res
 
 		wg.Wait()
 
+		defer func() {
+			channel.Unsubscribe(inletsID)
+			log.Printf("router-remove [%s]\n", inletsID)
+		}()
+
 		if res == nil {
 			w.WriteHeader(http.StatusGatewayTimeout)
 			w.Write([]byte("Timeout\n"))
@@ -91,11 +96,6 @@ func proxyHandler(requests chan *http.Request, channel *Channel) func(w http.Res
 		w.WriteHeader(res.StatusCode)
 		w.Write([]byte("Done\n"))
 		log.Printf("router-sent [%s]\n", inletsID)
-
-		defer func() {
-			channel.Unsubscribe(inletsID)
-			log.Printf("router-remove [%s]\n", inletsID)
-		}()
 
 	}
 }
